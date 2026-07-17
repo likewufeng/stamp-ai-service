@@ -7,9 +7,7 @@
 #FilePath: /stamp-ai-service/core/detector_base.py
 #Copyright 版权声明
 #
-from abc import ABC
-from abc import abstractmethod
-
+from abc import ABC, abstractmethod
 from typing import List
 
 from schemas.stamp import StampBox
@@ -18,5 +16,5 @@ from schemas.stamp import StampBox
 class BaseDetector(ABC):
 
     @abstractmethod
-    def detect(self, image_path: str) -> List[StampBox]:
-        pass
+    def detect(self, image_path: str, debug: bool = False) -> List[StampBox]:
+        raise NotImplementedError

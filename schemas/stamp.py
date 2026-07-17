@@ -7,16 +7,19 @@
 #FilePath: /stamp-ai-service/schemas/stamp.py
 #Copyright 版权声明
 #
-from pydantic import BaseModel
 from typing import List
+from pydantic import BaseModel, Field
+
 
 class StampBox(BaseModel):
     x: int
     y: int
     w: int
     h: int
-    confidence: float = 1.0  # 预留置信度
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     label: str = "stamp"
+    color: str = "unknown"
+
 
 class StampDetectionResponse(BaseModel):
     filename: str
