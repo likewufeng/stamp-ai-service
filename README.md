@@ -1,7 +1,7 @@
 <!--
  * @Author: WuFeng <763467339@qq.com>
  * @Date: 2026-07-17 09:41:11
- * @LastEditTime: 2026-07-17 10:34:14
+ * @LastEditTime: 2026-07-17 14:11:39
  * @LastEditors: WuFeng <763467339@qq.com>
  * @Description: 
  * @FilePath: /stamp-ai-service/README.md
@@ -57,3 +57,41 @@ Swagger 自动生成接口文档。
 精度最高。
 无需训练的方案（推荐作为 V1）
 利用传统视觉算法自动定位印章，再用 AI 做精细分割。
+
+
+```
+                    FastAPI
+                        │
+                        ▼
+                DocumentService
+                        │
+        ┌───────────────┼────────────────┐
+        │               │                │
+        ▼               ▼                ▼
+ DocumentDetector   Perspective     Orientation
+   (文档检测)         (透视)          (方向校正)
+        │
+        ▼
+     Paper Image
+        │
+        ▼
+ Layout Analyzer（版面分析）
+        │
+ ┌──────┴──────────┐
+ │                 │
+ ▼                 ▼
+TableDetector   StampDetector
+ │                 │
+ ▼                 ▼
+表格区域        所有印章区域
+        │
+        └──────┬──────────────┐
+               ▼              ▼
+        StampSegmentor   OCR(可选)
+               │
+               ▼
+        Alpha Composer
+               │
+               ▼
+          Transparent PNG
+```
