@@ -21,3 +21,9 @@ __pycache__/
 
 # 上传的文件
 uploads/
+
+# 临时文件
+temp/
+
+# 输出文件
+outputs/
