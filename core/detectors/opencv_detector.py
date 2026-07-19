@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 10:58:36
-#LastEditTime: 2026-07-17 15:22:40
+#LastEditTime: 2026-07-19 10:57:58
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: OpenCV 印章检测器
 #FilePath: /stamp-ai-service/core/detectors/opencv_detector.py
@@ -12,7 +12,7 @@ from typing import List
 import cv2
 import numpy as np
 
-from core.detector_base import BaseDetector
+from core.detectors.detector_base import BaseDetector
 from schemas.stamp import StampBox
 
 

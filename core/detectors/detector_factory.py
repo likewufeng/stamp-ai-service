@@ -7,7 +7,7 @@
 #FilePath: /stamp-ai-service/core/detector_factory.py
 #Copyright 版权声明
 #
-from core.detector_base import BaseDetector
+from core.detectors.detector_base import BaseDetector
 from core.detectors.opencv_detector import OpenCVDetector
 
 
