@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 14:21:52
-#LastEditTime: 2026-07-17 15:51:06
+#LastEditTime: 2026-07-19 13:22:54
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 文档预处理器
 #FilePath: /stamp-ai-service/core/processors/document_processor.py
@@ -33,6 +33,7 @@ class DocumentProcessor:
         self,
         image: np.ndarray,
         correct_perspective: bool = True,
+        correct_orientation: bool = True,
     ) -> DocumentProcessResult:
         if image is None or image.size == 0:
             raise ValueError("输入文档图片为空")
@@ -40,6 +41,7 @@ class DocumentProcessor:
         working_image = image.copy()
         perspective_applied = False
 
+        # 自动矫正透视
         if correct_perspective:
             corrected = self._try_perspective_correction(
                 working_image
@@ -48,6 +50,14 @@ class DocumentProcessor:
             if corrected is not None:
                 working_image = corrected
                 perspective_applied = True
+
+        # 自动旋转方向
+        if correct_orientation:
+          working_image = (
+              self._try_orientation_correction(
+                  working_image
+              )
+          )
 
         working_image = self._resize_max_side(
             working_image
@@ -62,6 +72,188 @@ class DocumentProcessor:
             analysis_image=analysis_image,
             perspective_applied=perspective_applied,
         )
+    
+    def _try_orientation_correction(
+        self,
+        image: np.ndarray,
+    ) -> np.ndarray:
+        """
+        自动尝试 0°/90°/180°/270°。
+
+        只有当最佳方向明显优于其它方向时，
+        才进行旋转。
+        """
+
+        candidates = [
+            image,
+            cv2.rotate(
+                image,
+                cv2.ROTATE_90_CLOCKWISE,
+            ),
+            cv2.rotate(
+                image,
+                cv2.ROTATE_180,
+            ),
+            cv2.rotate(
+                image,
+                cv2.ROTATE_90_COUNTERCLOCKWISE,
+            ),
+        ]
+
+        scores = [
+            self._orientation_score(img)
+            for img in candidates
+        ]
+
+        best_index = int(
+            np.argmax(scores)
+        )
+
+        sorted_scores = sorted(
+            scores,
+            reverse=True,
+        )
+
+        best_score = sorted_scores[0]
+        second_score = sorted_scores[1]
+
+        # 只有当领先明显时才旋转
+        margin = (
+            abs(best_score) * 0.12
+        )
+
+        margin = max(
+            margin,
+            120,
+        )
+
+        if (
+            best_score - second_score
+        ) < margin:
+            return image
+
+        return candidates[best_index]
+    
+
+    @staticmethod
+    def _orientation_score(
+        image: np.ndarray,
+    ) -> float:
+        """
+        文档方向评分。
+
+        分数越高，
+        越可能是正常方向。
+
+        注意：
+        对于没有方向信息（如只有印章）的图片，
+        四个方向分数会非常接近，
+        上层不会自动旋转。
+        """
+
+        gray = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2GRAY,
+        )
+
+        _, binary = cv2.threshold(
+            gray,
+            0,
+            255,
+            cv2.THRESH_BINARY_INV
+            + cv2.THRESH_OTSU,
+        )
+
+        height, width = binary.shape
+
+        top = binary[
+            : height // 4,
+            :
+        ]
+
+        bottom = binary[
+            height * 3 // 4 :,
+            :
+        ]
+
+        top_pixels = cv2.countNonZero(
+            top
+        )
+
+        bottom_pixels = cv2.countNonZero(
+            bottom
+        )
+
+        horizontal_kernel = (
+            cv2.getStructuringElement(
+                cv2.MORPH_RECT,
+                (
+                    max(
+                        20,
+                        width // 20,
+                    ),
+                    1,
+                ),
+            )
+        )
+
+        vertical_kernel = (
+            cv2.getStructuringElement(
+                cv2.MORPH_RECT,
+                (
+                    1,
+                    max(
+                        20,
+                        height // 20,
+                    ),
+                ),
+            )
+        )
+
+        horizontal = cv2.morphologyEx(
+            binary,
+            cv2.MORPH_OPEN,
+            horizontal_kernel,
+        )
+
+        vertical = cv2.morphologyEx(
+            binary,
+            cv2.MORPH_OPEN,
+            vertical_kernel,
+        )
+
+        horizontal_score = (
+            cv2.countNonZero(
+                horizontal
+            )
+        )
+
+        vertical_score = (
+            cv2.countNonZero(
+                vertical
+            )
+        )
+
+        score = 0.0
+
+        # 文档通常顶部信息更多
+        score += (
+            top_pixels
+            - bottom_pixels
+        ) * 0.3
+
+        # 正常方向一般横线更多
+        score += (
+            horizontal_score
+            - vertical_score
+        ) * 0.8
+
+        # 文档通常竖版
+        if height >= width:
+            score += 200
+
+        return float(score)
+    
 
     def _resize_max_side(
         self,
