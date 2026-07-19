@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 11:21:37
-#LastEditTime: 2026-07-17 15:50:10
+#LastEditTime: 2026-07-19 10:36:04
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 图像分割器
 #这个文件的作用只有一个：给一张裁剪后的印章图片，返回一张二值 Mask
-#FilePath: /stamp-ai-service/core/segmentor.py
+#FilePath: /stamp-ai-service/core/segmentation/segmentor.py
 #Copyright 版权声明
 #
-# core/segmentor.py
+# core/segmentation/segmentor.py
 
 from abc import ABC, abstractmethod
 
 import cv2
 import numpy as np
 
-from core.color_utils import (
+from core.utils.color_utils import (
     create_color_mask,
     remove_small_components,
 )

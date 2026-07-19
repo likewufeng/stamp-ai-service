@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 11:23:19
-#LastEditTime: 2026-07-17 15:50:28
+#LastEditTime: 2026-07-19 10:36:32
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 图像透明度处理
-#FilePath: /stamp-ai-service/core/alpha.py
+#FilePath: /stamp-ai-service/core/utils/alpha.py
 #Copyright 版权声明
 #
-# core/alpha.py
+# core/utils/alpha.py
 
 from typing import Tuple
 

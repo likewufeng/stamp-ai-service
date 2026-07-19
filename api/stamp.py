@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:42:45
-#LastEditTime: 2026-07-17 16:11:34
+#LastEditTime: 2026-07-19 10:06:52
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 印章识别接口
 #FilePath: /stamp-ai-service/api/stamp.py
@@ -26,7 +26,7 @@ from config import (
     MAX_UPLOAD_BYTES,
     UPLOAD_DIR,
 )
-from core.service import stamp_service
+from core.services.service import stamp_service
 from schemas.stamp import StampExtractionResponse
 
 
