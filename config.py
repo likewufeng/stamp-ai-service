@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:53
-#LastEditTime: 2026-07-20 13:59:35
+#LastEditTime: 2026-07-20 14:06:52
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 配置文件
 #FilePath: /stamp-ai-service/config.py
@@ -74,4 +74,9 @@ CLEANUP_DIRS = (
     UPLOAD_DIR,
     OUTPUT_DIR,
     TEMP_DIR,
+)
+
+# 日志保留天数（loguru retention）
+LOG_RETENTION_DAYS = int(
+    os.getenv("LOG_RETENTION_DAYS", 3)
 )

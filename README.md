@@ -341,3 +341,19 @@ python app.py
 - `config.py`：清理配置
 - `utils/cleanup.py`：清理实现（后台线程）
 - `app.py`：`lifespan` 中启动/停止清理任务
+
+### 日志自动清理
+
+应用日志由 loguru 管理，默认只保留最近 **3 天**：
+
+| 项 | 默认值 | 环境变量 |
+| --- | --- | --- |
+| 日志文件 | `logs/service.log` | - |
+| 单文件滚动 | `50 MB` | - |
+| 保留天数 | `3` 天 | `LOG_RETENTION_DAYS` |
+
+```bash
+# 例如改为保留 7 天
+export LOG_RETENTION_DAYS=7
+python app.py
+```

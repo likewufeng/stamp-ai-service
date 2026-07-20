@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:42
-#LastEditTime: 2026-07-20 13:48:16
+#LastEditTime: 2026-07-20 14:07:30
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 服务器入口
 #FilePath: /stamp-ai-service/app.py
@@ -22,6 +22,7 @@ from config import (
     APP_NAME,
     APP_VERSION,
     LOG_DIR,
+    LOG_RETENTION_DAYS,
     OUTPUT_DIR,
 )
 from utils.cleanup import cleanup_service
@@ -30,7 +31,7 @@ from utils.cleanup import cleanup_service
 logger.add(
     LOG_DIR / "service.log",
     rotation="50 MB",
-    retention="30 days",
+    retention=f"{LOG_RETENTION_DAYS} days",
     encoding="utf-8",
     enqueue=True,
 )
