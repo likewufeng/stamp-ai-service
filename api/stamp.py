@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:42:45
-#LastEditTime: 2026-07-19 10:06:52
+#LastEditTime: 2026-07-20 09:46:23
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 印章识别接口
 #FilePath: /stamp-ai-service/api/stamp.py
@@ -15,6 +15,7 @@ import aiofiles
 from fastapi import (
     APIRouter,
     File,
+    Form,
     HTTPException,
     UploadFile,
 )
@@ -44,9 +45,14 @@ router = APIRouter(
 async def extract(
     file: UploadFile = File(...),
     # 是否开启调试模式
-    debug: bool = False,
+    debug: bool = Form(default=False),
     # 是否纠正透视
-    correct_perspective: bool = True,
+    correct_perspective: bool = Form(default=True),
+    # 返回方式：url / base64 / both
+    return_type: str = Form(
+        default="base64",
+        description="返回方式：url / base64 / both（默认 base64）",
+    ),
 ):
     source_filename = (
         file.filename or "unknown"
@@ -65,6 +71,20 @@ async def extract(
                     sorted(ALLOWED_EXTENSIONS)
                 )
             ),
+        )
+
+    normalized_return_type = (
+        return_type or "base64"
+    ).strip().lower()
+
+    if normalized_return_type not in {
+        "url",
+        "base64",
+        "both",
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="return_type 仅支持 url / base64 / both",
         )
 
     file_data = await file.read(
@@ -109,6 +129,7 @@ async def extract(
             correct_perspective=(
                 correct_perspective
             ),
+            return_type=normalized_return_type,
         )
 
         result = await run_in_threadpool(
@@ -116,9 +137,10 @@ async def extract(
         )
 
         logger.info(
-            "印章提取完成 filename={} count={}",
+            "印章提取完成 filename={} count={} return_type={}",
             source_filename,
             result.count,
+            normalized_return_type,
         )
 
         return result

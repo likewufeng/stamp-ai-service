@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 10:45:35
-#LastEditTime: 2026-07-20 09:12:55
+#LastEditTime: 2026-07-20 09:47:04
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 业务管理
 #FilePath: /stamp-ai-service/core/services/service.py
@@ -49,7 +49,12 @@ class StampService:
         source_filename: str,
         debug: bool = False,
         correct_perspective: bool = True,
+        return_type: str = "base64",
     ) -> StampExtractionResponse:
+        return_type = (return_type or "base64").strip().lower()
+        if return_type not in {"url", "base64", "both"}:
+            raise ValueError("return_type 仅支持 url / base64 / both")
+
         request_id = uuid.uuid4().hex
 
         request_output_dir = (
@@ -143,6 +148,18 @@ class StampService:
                 transparent_stamp.shape[:2]
             )
 
+            url_value = None
+            base64_value = None
+            if return_type in {"url", "both"}:
+                url_value = self._build_output_url(
+                    request_id,
+                    file_name,
+                )
+            if return_type in {"base64", "both"}:
+                base64_value = self._encode_base64_png(
+                    transparent_stamp,
+                )
+
             stamp_outputs.append(
                 StampOutput(
                     index=index,
@@ -150,13 +167,8 @@ class StampService:
                     width=output_width,
                     height=output_height,
                     file_name=file_name,
-                    url=self._build_output_url(
-                        request_id,
-                        file_name,
-                    ),
-                    base64=self._encode_base64_png(
-                        transparent_stamp,
-                    ),
+                    url=url_value,
+                    base64=base64_value,
                 )
             )
 
@@ -194,7 +206,7 @@ class StampService:
 
         zip_url = None
 
-        if stamp_paths:
+        if stamp_paths and return_type in {"url", "both"}:
             zip_name = "stamps.zip"
             zip_path = request_output_dir / zip_name
 
@@ -218,6 +230,7 @@ class StampService:
             perspective_applied=(
                 document.perspective_applied
             ),
+            return_type=return_type,
             count=len(stamp_outputs),
             stamps=stamp_outputs,
             zip_url=zip_url,
