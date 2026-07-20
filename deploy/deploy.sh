@@ -1,13 +1,4 @@
 #!/usr/bin/env bash
-###
- # @Author: WuFeng <763467339@qq.com>
- # @Date: 2026-07-20 14:32:05
- # @LastEditTime: 2026-07-20 14:32:14
- # @LastEditors: WuFeng <763467339@qq.com>
- # @Description:  One-shot deploy helper for Stamp AI Service
- # @FilePath: /stamp-ai-service/deploy/deploy.sh
- # Copyright 版权声明
-### 
 # One-shot deploy helper for Stamp AI Service
 set -euo pipefail
 
@@ -25,6 +16,17 @@ else
 fi
 
 echo "[3/5] Build images..."
+# Prefer .env build args if present
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env || true
+  set +a
+fi
+export APT_MIRROR="${APT_MIRROR:-mirrors.aliyun.com}"
+export PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+echo "  APT_MIRROR=${APT_MIRROR}"
+echo "  PIP_INDEX_URL=${PIP_INDEX_URL}"
 docker compose build
 
 echo "[4/5] Start services..."
