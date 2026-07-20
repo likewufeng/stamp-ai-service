@@ -299,3 +299,45 @@ curl -X POST "http://127.0.0.1:8000/api/signature/extract" \
 pip install -r requirements.txt
 # 首次运行会自动下载 u2net.onnx（约 176MB）到 ~/.u2net/
 ```
+
+---
+
+## 定时清理 uploads / outputs
+
+服务启动后会自动开启后台清理任务，定期删除 `uploads/`、`outputs/`、`temp/` 中的过期文件，避免磁盘被历史请求占满。
+
+### 默认策略
+
+| 项 | 默认值 | 说明 |
+| --- | --- | --- |
+| 是否启用 | `true` | `CLEANUP_ENABLED` |
+| 扫描间隔 | `3600` 秒（1 小时） | `CLEANUP_INTERVAL_SECONDS` |
+| 保留时长 | `86400` 秒（24 小时） | `CLEANUP_MAX_AGE_SECONDS` |
+| 清理目录 | `uploads` / `outputs` / `temp` | 见 `config.CLEANUP_DIRS` |
+
+### 删除规则
+
+- `uploads/` 下单文件：按文件 `mtime` 超期删除
+- `outputs/{request_id}/`：按目录内**最新内容**的 `mtime` 判断，整个请求目录一次性删除
+- `temp/`：同上
+- **不会**删除 `uploads` / `outputs` / `temp` 根目录本身
+- 启动时会先执行一轮清理，之后按间隔循环
+
+### 环境变量示例
+
+```bash
+# 关闭清理
+export CLEANUP_ENABLED=false
+
+# 每 30 分钟扫一次，只保留 12 小时
+export CLEANUP_INTERVAL_SECONDS=1800
+export CLEANUP_MAX_AGE_SECONDS=43200
+
+python app.py
+```
+
+### 相关代码
+
+- `config.py`：清理配置
+- `utils/cleanup.py`：清理实现（后台线程）
+- `app.py`：`lifespan` 中启动/停止清理任务

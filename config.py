@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:53
-#LastEditTime: 2026-07-19 14:47:46
+#LastEditTime: 2026-07-20 13:59:35
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 配置文件
 #FilePath: /stamp-ai-service/config.py
@@ -30,7 +30,7 @@ for directory in (
 
 
 APP_NAME = "Stamp AI Service"
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.6.0"
 
 MAX_UPLOAD_BYTES = int(
     os.getenv("MAX_UPLOAD_BYTES", 30 * 1024 * 1024)
@@ -51,3 +51,27 @@ ALLOWED_EXTENSIONS = {
 }
 
 OUTPUT_URL_PREFIX = "/outputs"
+
+# 定时清理 uploads / outputs / temp 中的过期文件
+# CLEANUP_ENABLED: true/false
+# CLEANUP_INTERVAL_SECONDS: 扫描间隔（秒），默认 1 小时
+# CLEANUP_MAX_AGE_SECONDS: 文件/目录超过该时长则删除，默认 24 小时
+CLEANUP_ENABLED = (
+    os.getenv("CLEANUP_ENABLED", "true").strip().lower()
+    in {"1", "true", "yes", "on"}
+)
+
+CLEANUP_INTERVAL_SECONDS = int(
+    os.getenv("CLEANUP_INTERVAL_SECONDS", 60 * 60)
+)
+
+CLEANUP_MAX_AGE_SECONDS = int(
+    os.getenv("CLEANUP_MAX_AGE_SECONDS", 24 * 60 * 60)
+)
+
+# 需要清理的目录（相对项目根或绝对路径由 config 统一管理）
+CLEANUP_DIRS = (
+    UPLOAD_DIR,
+    OUTPUT_DIR,
+    TEMP_DIR,
+)

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:42
-#LastEditTime: 2026-07-19 14:30:16
+#LastEditTime: 2026-07-20 13:48:16
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 服务器入口
 #FilePath: /stamp-ai-service/app.py
 #Copyright 版权声明
 #
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +24,7 @@ from config import (
     LOG_DIR,
     OUTPUT_DIR,
 )
+from utils.cleanup import cleanup_service
 
 
 logger.add(
@@ -34,12 +36,28 @@ logger.add(
 )
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动后台清理任务
+    cleanup_service.start()
+    try:
+        # 启动时先跑一轮，尽快回收历史垃圾文件
+        cleanup_service.run_once()
+    except Exception:
+        logger.exception("启动时文件清理失败")
+
+    yield
+
+    cleanup_service.stop()
+
+
 app = FastAPI(
     title=APP_NAME,
     version=APP_VERSION,
     description=(
         "印章 / 手写签名检测、抠图与透明 PNG 生成服务"
     ),
+    lifespan=lifespan,
 )
 
 
