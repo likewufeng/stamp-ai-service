@@ -412,8 +412,6 @@ class SignatureService:
             # 与已保留簇的最近距离
             min_dist = 1e18
             for k in kept:
-                dx = comp["cx"] - k["cx"]
-                dy = comp["cy"] - k["cy"]
                 # 框间距（比中心距更稳）
                 gap_x = max(
                     0.0,
