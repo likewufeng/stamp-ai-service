@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 14:21:52
-#LastEditTime: 2026-07-19 13:22:54
+#LastEditTime: 2026-07-20 09:10:35
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 文档预处理器
 #FilePath: /stamp-ai-service/core/processors/document_processor.py
@@ -33,7 +33,7 @@ class DocumentProcessor:
         self,
         image: np.ndarray,
         correct_perspective: bool = True,
-        correct_orientation: bool = True,
+        correct_orientation: bool = False,
     ) -> DocumentProcessResult:
         if image is None or image.size == 0:
             raise ValueError("输入文档图片为空")
