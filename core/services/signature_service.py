@@ -88,9 +88,17 @@ class SignatureService:
 
         enhanced = self._enhance_for_signature(original)
 
-        # 双路提取：rembg + 传统暗度，择优
+        # 双路提取：rembg + 传统暗度
         rembg_rgba = self._remove_background(enhanced)
         fallback_rgba = self._fallback_threshold_rgba(enhanced)
+
+        # 优先合并两路墨迹（补全淡铅笔被 rembg 漏掉的笔画）
+        # 若某一路失败，再退回单路
+        merged_rgba = self._merge_signature_masks(
+            rembg_rgba=rembg_rgba,
+            fallback_rgba=fallback_rgba,
+            alpha_threshold=ink_threshold,
+        )
 
         rembg_sig = self._to_pure_black_signature(
             rembg_rgba,
@@ -100,48 +108,95 @@ class SignatureService:
             fallback_rgba,
             alpha_threshold=ink_threshold,
         )
+        merged_sig = self._to_pure_black_signature(
+            merged_rgba,
+            alpha_threshold=ink_threshold,
+        )
 
         rembg_crop = self._crop_content(rembg_sig, padding=padding)
         fallback_crop = self._crop_content(fallback_sig, padding=padding)
+        merged_crop = self._crop_content(merged_sig, padding=padding)
 
         rembg_score = self._score_signature_candidate(rembg_crop)
         fallback_score = self._score_signature_candidate(fallback_crop)
+        merged_score = self._score_signature_candidate(merged_crop)
 
         logger.info(
-            "签名候选评分 filename={} rembg={:.3f} fallback={:.3f}",
+            "签名候选评分 filename={} rembg={:.3f} fallback={:.3f} merged={:.3f}",
             source_filename,
             rembg_score,
             fallback_score,
+            merged_score,
         )
 
-        if rembg_crop is None and fallback_crop is None:
-            raise ValueError("未检测到签名内容，请检查图片是否包含清晰手写签名")
-
         # 选择策略：
-        # 1) rembg 足够好时优先 rembg（边缘更干净）
-        # 2) 仅当 fallback 明显更完整时才切换（淡铅笔场景）
-        use_fallback = False
-        if rembg_crop is None and fallback_crop is not None:
-            use_fallback = True
-        elif fallback_crop is not None and rembg_crop is not None:
-            if rembg_score < 0.45 and fallback_score > rembg_score:
-                use_fallback = True
-            elif fallback_score > rembg_score * 1.25 and fallback_score >= 0.55:
-                use_fallback = True
+        # 1) 默认优先 merged（补全淡笔）
+        # 2) 若 merged 噪声明显变差（分数显著低于 rembg），退回 rembg
+        # 3) rembg/fallback 都失败时用另一路
+        method = "merged"
+        signature = merged_sig
+        cropped = merged_crop
+        removed = merged_rgba
 
-        if use_fallback:
-            signature = fallback_sig
-            cropped = fallback_crop
-            removed = fallback_rgba
-            method = "threshold_fallback"
+        if cropped is None:
+            if rembg_crop is not None and rembg_score >= fallback_score:
+                method, signature, cropped, removed = (
+                    "rembg", rembg_sig, rembg_crop, rembg_rgba
+                )
+            elif fallback_crop is not None:
+                method, signature, cropped, removed = (
+                    "threshold_fallback", fallback_sig, fallback_crop, fallback_rgba
+                )
+            elif rembg_crop is not None:
+                method, signature, cropped, removed = (
+                    "rembg", rembg_sig, rembg_crop, rembg_rgba
+                )
+            else:
+                raise ValueError("未检测到签名内容，请检查图片是否包含清晰手写签名")
         else:
-            signature = rembg_sig
-            cropped = rembg_crop if rembg_crop is not None else fallback_crop
-            removed = rembg_rgba
-            method = "rembg"
+            # merged 墨迹量
+            merged_ink = self._count_ink_pixels(merged_crop)
+            rembg_ink = self._count_ink_pixels(rembg_crop)
+            fallback_ink = self._count_ink_pixels(fallback_crop)
+
+            # 若 merged 比 rembg 多出不少墨迹，强制用 merged（补淡笔）
+            prefer_merged = (
+                merged_ink >= max(rembg_ink, 1) * 1.05
+                or merged_score >= rembg_score - 0.05
+            )
+
+            # 若 merged 分数明显更差，且墨迹没有明显增加，退回 rembg
+            if (
+                rembg_crop is not None
+                and rembg_score > merged_score + 0.08
+                and merged_ink < rembg_ink * 1.08
+            ):
+                method, signature, cropped, removed = (
+                    "rembg", rembg_sig, rembg_crop, rembg_rgba
+                )
+            elif not prefer_merged and rembg_crop is not None and rembg_score >= merged_score:
+                method, signature, cropped, removed = (
+                    "rembg", rembg_sig, rembg_crop, rembg_rgba
+                )
+            elif (
+                fallback_crop is not None
+                and fallback_score > max(merged_score, rembg_score) + 0.1
+                and fallback_ink > max(merged_ink, rembg_ink) * 1.15
+            ):
+                method, signature, cropped, removed = (
+                    "threshold_fallback", fallback_sig, fallback_crop, fallback_rgba
+                )
 
         if cropped is None:
             raise ValueError("未检测到签名内容，请检查图片是否包含清晰手写签名")
+
+        logger.info(
+            "签名选用 method={} ink(merged/rembg/fallback)={}/{}/{}",
+            method,
+            self._count_ink_pixels(merged_crop),
+            self._count_ink_pixels(rembg_crop),
+            self._count_ink_pixels(fallback_crop),
+        )
 
         content_box = SignatureBox(
             x=0,
@@ -393,6 +448,92 @@ class SignatureService:
         return out
 
     @staticmethod
+    def _merge_signature_masks(
+        rembg_rgba: Image.Image,
+        fallback_rgba: Image.Image,
+        alpha_threshold: int = 30,
+    ) -> Image.Image:
+        """
+        以 rembg 为主，仅在其签名邻域内吸收传统阈值的淡笔墨迹。
+
+        这样可以：
+        - 补全 rembg 漏掉的淡铅笔笔画（如「三」）
+        - 避免整页照片里把折痕/纸噪大面积并进来
+        """
+        rembg_arr = np.array(rembg_rgba.convert("RGBA"))
+        fallback_arr = np.array(fallback_rgba.convert("RGBA"))
+
+        if rembg_arr.shape[:2] != fallback_arr.shape[:2]:
+            fallback_img = fallback_rgba.convert("RGBA").resize(
+                (rembg_arr.shape[1], rembg_arr.shape[0]),
+                Image.Resampling.NEAREST,
+            )
+            fallback_arr = np.array(fallback_img)
+
+        thr = int(np.clip(alpha_threshold, 0, 255))
+        rembg_mask = np.where(rembg_arr[:, :, 3] > thr, 255, 0).astype(np.uint8)
+        fallback_mask = np.where(fallback_arr[:, :, 3] > thr, 255, 0).astype(np.uint8)
+
+        if cv2.countNonZero(rembg_mask) < 20:
+            # rembg 几乎没结果时，退回 fallback 主簇
+            cleaned = SignatureService._keep_main_signature_cluster(fallback_mask)
+            rgba = np.zeros_like(rembg_arr)
+            rgba[cleaned > 0] = (0, 0, 0, 255)
+            return Image.fromarray(rgba, mode="RGBA")
+
+        # 只在 rembg 签名区域附近吸收 fallback 墨迹
+        h, w = rembg_mask.shape[:2]
+        # 膨胀半径随图像尺寸自适应
+        radius = max(12, int(round(min(h, w) * 0.04)))
+        if radius % 2 == 0:
+            radius += 1
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE,
+            (radius, radius),
+        )
+        neighborhood = cv2.dilate(rembg_mask, kernel, iterations=2)
+
+        # 也可用 rembg 外接框再扩一圈，避免笔画断开时邻域不够
+        pts = cv2.findNonZero(rembg_mask)
+        if pts is not None:
+            x, y, bw, bh = cv2.boundingRect(pts)
+            pad_x = max(20, int(bw * 0.35))
+            pad_y = max(20, int(bh * 0.35))
+            x1 = max(0, x - pad_x)
+            y1 = max(0, y - pad_y)
+            x2 = min(w, x + bw + pad_x)
+            y2 = min(h, y + bh + pad_y)
+            box_roi = np.zeros_like(rembg_mask)
+            box_roi[y1:y2, x1:x2] = 255
+            neighborhood = cv2.bitwise_or(neighborhood, box_roi)
+
+        fallback_near = cv2.bitwise_and(fallback_mask, neighborhood)
+        merged = cv2.bitwise_or(rembg_mask, fallback_near)
+
+        merged = cv2.morphologyEx(
+            merged,
+            cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+            iterations=1,
+        )
+        merged = SignatureService._keep_main_signature_cluster(merged)
+
+        # 去掉极小孤立点
+        min_area = max(8, int(h * w * 0.00001))
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(
+            merged,
+            connectivity=8,
+        )
+        cleaned = np.zeros_like(merged)
+        for i in range(1, count):
+            if int(stats[i, cv2.CC_STAT_AREA]) >= min_area:
+                cleaned[labels == i] = 255
+
+        rgba = np.zeros_like(rembg_arr)
+        rgba[cleaned > 0] = (0, 0, 0, 255)
+        return Image.fromarray(rgba, mode="RGBA")
+
+    @staticmethod
     def _to_pure_black_signature(
         image: Image.Image,
         alpha_threshold: int = 30,
@@ -414,6 +555,13 @@ class SignatureService:
             out[soft, 3] = np.clip(np.round(a * 255.0), 0, 255).astype(np.uint8)
 
         return Image.fromarray(out, mode="RGBA")
+
+    @staticmethod
+    def _count_ink_pixels(image: Optional[Image.Image]) -> int:
+        if image is None:
+            return 0
+        alpha = np.array(image.convert("RGBA"))[:, :, 3]
+        return int(np.count_nonzero(alpha > 30))
 
     @staticmethod
     def _score_signature_candidate(

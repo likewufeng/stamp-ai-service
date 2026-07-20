@@ -89,11 +89,150 @@ TableDetector   StampDetector
 
 ---
 
+## 印章抠图接口
+
+### `POST /api/stamp/extract`
+
+从扫描件 / 拍照件中检测印章，抠出透明 PNG。
+
+#### 请求（multipart/form-data）
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `file` | file | 是 | - | 图片文件（jpg/jpeg/png/bmp/webp/tif/tiff） |
+| `debug` | bool | 否 | `false` | 是否输出调试文件（检测框、mask 等） |
+| `correct_perspective` | bool | 否 | `true` | 是否尝试文档透视校正 |
+| `return_type` | string | 否 | `base64` | 返回方式：`url` / `base64` / `both` |
+
+#### `return_type` 说明
+
+| 取值 | 行为 |
+| --- | --- |
+| `base64`（默认） | 每个印章返回 `base64`，`url` / `zip_url` 为 `null` |
+| `url` | 每个印章返回 `url`，并生成 `zip_url`，`base64` 为 `null` |
+| `both` | 同时返回 `url`、`base64`，并生成 `zip_url` |
+
+#### 返回示例
+
+```json
+{
+  "request_id": "a1b2c3d4e5f6",
+  "filename": "stamp_scan.jpg",
+  "original_width": 1600,
+  "original_height": 2400,
+  "processed_width": 1600,
+  "processed_height": 2400,
+  "perspective_applied": false,
+  "return_type": "base64",
+  "count": 2,
+  "stamps": [
+    {
+      "index": 1,
+      "box": {
+        "x": 120,
+        "y": 340,
+        "w": 180,
+        "h": 180,
+        "confidence": 1.0,
+        "label": "stamp",
+        "color": "red"
+      },
+      "width": 200,
+      "height": 200,
+      "file_name": "stamp_001.png",
+      "url": null,
+      "base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+    },
+    {
+      "index": 2,
+      "box": {
+        "x": 520,
+        "y": 360,
+        "w": 160,
+        "h": 160,
+        "confidence": 1.0,
+        "label": "stamp",
+        "color": "red"
+      },
+      "width": 180,
+      "height": 180,
+      "file_name": "stamp_002.png",
+      "url": null,
+      "base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+    }
+  ],
+  "zip_url": null,
+  "debug_files": []
+}
+```
+
+#### 返回字段说明
+
+| 字段 | 说明 |
+| --- | --- |
+| `request_id` | 本次请求 ID，也是输出目录名 |
+| `filename` | 原始上传文件名 |
+| `original_width` / `original_height` | 原图尺寸 |
+| `processed_width` / `processed_height` | 预处理后尺寸 |
+| `perspective_applied` | 是否实际做了透视校正 |
+| `return_type` | 本次实际使用的返回方式 |
+| `count` | 检出印章数量 |
+| `stamps` | 印章列表 |
+| `stamps[].box` | 印章外接矩形（x/y/w/h）及颜色、置信度 |
+| `stamps[].width` / `height` | 输出透明 PNG 尺寸 |
+| `stamps[].file_name` | 输出文件名，如 `stamp_001.png` |
+| `stamps[].url` | 静态访问路径：`/outputs/{request_id}/stamp_001.png` |
+| `stamps[].base64` | `data:image/png;base64,...`，可直接用于前端 `<img src>` |
+| `zip_url` | 全部印章打包下载路径：`/outputs/{request_id}/stamps.zip` |
+| `debug_files` | `debug=true` 时的调试文件 URL 列表 |
+
+#### 调用示例
+
+```bash
+# 默认：只返回 base64
+curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
+  -F "file=@stamp_scan.jpg"
+
+# 只返回 URL + ZIP
+curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
+  -F "file=@stamp_scan.jpg" \
+  -F "return_type=url"
+
+# 同时返回 URL 和 base64
+curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
+  -F "file=@stamp_scan.jpg" \
+  -F "return_type=both"
+
+# 开启调试 + 关闭透视校正
+curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
+  -F "file=@stamp_scan.jpg" \
+  -F "return_type=both" \
+  -F "debug=true" \
+  -F "correct_perspective=false"
+```
+
+#### 错误码
+
+| HTTP 状态码 | 说明 |
+| --- | --- |
+| `400` | 文件为空、格式不支持、参数非法、图片处理失败 |
+| `413` | 上传文件过大 |
+| `500` | 服务器内部处理异常 |
+
+#### 说明
+
+- 支持一次检出多个印章
+- 输出为透明 PNG（Alpha 通道）
+- 访问 `url` / `zip_url` 时，服务需已挂载静态目录 `/outputs`
+- 在线调试文档：`http://127.0.0.1:8000/docs`
+
+---
+
 ## 手写签名抠图接口（v0.6.0 · rembg）
 
 ### 方案说明
 
-采用你提供的思路，核心流程：
+采用 rembg 去背景方案，核心流程：
 
 1. **rembg** AI 去背景（主路径）
 2. 对比度增强，提升淡铅笔可见度
@@ -107,15 +246,15 @@ TableDetector   StampDetector
 
 #### 请求（multipart/form-data）
 
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `file` | file | 是 | 签名图片（白纸手写 / 扫描 / 拍照） |
-| `width` | int | 否 | 输出宽度（1~4096）。可只传一边 |
-| `height` | int | 否 | 输出高度（1~4096）。可只传一边 |
-| `resize_mode` | string | 否 | `fit`（默认，等比居中不变形）/ `fill` / `stretch` |
-| `return_type` | string | 否 | `url`（默认）/ `base64` / `both` |
-| `padding` | int | 否 | 裁切后四周留白，默认 `30` |
-| `debug` | bool | 否 | 输出调试文件，默认 `false` |
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `file` | file | 是 | - | 签名图片（白纸手写 / 扫描 / 拍照） |
+| `width` | int | 否 | - | 输出宽度（1~4096）。可只传一边 |
+| `height` | int | 否 | - | 输出高度（1~4096）。可只传一边 |
+| `resize_mode` | string | 否 | `fit` | `fit`（等比居中不变形）/ `fill` / `stretch` |
+| `return_type` | string | 否 | `base64` | `url` / `base64` / `both` |
+| `padding` | int | 否 | `30` | 裁切后四周留白 |
+| `debug` | bool | 否 | `false` | 输出调试文件 |
 
 #### 尺寸适配（防变形）
 
@@ -127,21 +266,18 @@ TableDetector   StampDetector
 #### 调用示例
 
 ```bash
-# 输出 800x400 透明签名 PNG，返回 URL
+# 默认返回 base64
 curl -X POST "http://127.0.0.1:8000/api/signature/extract" \
   -F "file=@signature.jpg" \
   -F "width=800" \
-  -F "height=400" \
-  -F "resize_mode=fit" \
-  -F "return_type=url" \
-  -F "padding=30"
+  -F "height=400"
 
-# 返回 base64（可直接给前端 img src）
+# 返回 URL
 curl -X POST "http://127.0.0.1:8000/api/signature/extract" \
   -F "file=@signature.jpg" \
   -F "width=400" \
   -F "height=200" \
-  -F "return_type=base64"
+  -F "return_type=url"
 
 # 同时返回 url + base64
 curl -X POST "http://127.0.0.1:8000/api/signature/extract" \
