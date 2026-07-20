@@ -1,3 +1,14 @@
+## 部署
+
+完整生产部署方案见 **[DEPLOY.md](./DEPLOY.md)**（Docker Compose + Nginx）。
+
+```bash
+cp .env.example .env
+chmod +x deploy/deploy.sh
+./deploy/deploy.sh
+# 文档: http://服务器IP/docs
+```
+
 ### 为了提高生产环境的稳定性，我还建议加入以下优化：
 
 ```

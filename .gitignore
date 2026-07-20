@@ -18,12 +18,22 @@ __pycache__/
 
 # 日志
 *.log
+logs/
 
-# 上传的文件
+# 上传 / 临时 / 输出
 uploads/
-
-# 临时文件
 temp/
-
-# 输出文件
 outputs/
+
+# 本地数据与密钥（部署产生）
+data/
+.env
+deploy/certs/
+
+# 模型缓存
+models/u2net/
+*.onnx
+
+# 系统
+.DS_Store
+Thumbs.db
