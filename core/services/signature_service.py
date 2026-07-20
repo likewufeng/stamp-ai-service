@@ -159,14 +159,23 @@ class SignatureService:
             rembg_ink = self._count_ink_pixels(rembg_crop)
             fallback_ink = self._count_ink_pixels(fallback_crop)
 
-            # 若 merged 比 rembg 多出不少墨迹，强制用 merged（补淡笔）
-            prefer_merged = (
-                merged_ink >= max(rembg_ink, 1) * 1.05
-                or merged_score >= rembg_score - 0.05
+            # rembg 已经足够好时，优先 rembg（更干净，少噪点）
+            # 仅当 rembg 偏弱 / 漏笔较多时，才用 merged 补淡笔
+            rembg_good_enough = (
+                rembg_crop is not None
+                and rembg_score >= 0.75
+                and rembg_ink >= 800
             )
+            merged_adds_a_lot = (
+                merged_ink >= max(rembg_ink, 1) * 1.18
+            )
+            merged_much_better = merged_score >= rembg_score + 0.08
 
-            # 若 merged 分数明显更差，且墨迹没有明显增加，退回 rembg
-            if (
+            if rembg_good_enough and not (merged_adds_a_lot or merged_much_better):
+                method, signature, cropped, removed = (
+                    "rembg", rembg_sig, rembg_crop, rembg_rgba
+                )
+            elif (
                 rembg_crop is not None
                 and rembg_score > merged_score + 0.08
                 and merged_ink < rembg_ink * 1.08
@@ -174,18 +183,16 @@ class SignatureService:
                 method, signature, cropped, removed = (
                     "rembg", rembg_sig, rembg_crop, rembg_rgba
                 )
-            elif not prefer_merged and rembg_crop is not None and rembg_score >= merged_score:
-                method, signature, cropped, removed = (
-                    "rembg", rembg_sig, rembg_crop, rembg_rgba
-                )
             elif (
                 fallback_crop is not None
                 and fallback_score > max(merged_score, rembg_score) + 0.1
                 and fallback_ink > max(merged_ink, rembg_ink) * 1.15
+                and rembg_score < 0.55
             ):
                 method, signature, cropped, removed = (
                     "threshold_fallback", fallback_sig, fallback_crop, fallback_rgba
                 )
+            # 否则保持 merged
 
         if cropped is None:
             raise ValueError("未检测到签名内容，请检查图片是否包含清晰手写签名")
@@ -516,20 +523,58 @@ class SignatureService:
         )
         merged = SignatureService._keep_main_signature_cluster(merged)
 
-        # 去掉极小孤立点
-        min_area = max(8, int(h * w * 0.00001))
-        count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        # 去掉极小孤立点 / 远离主签名的碎点
+        cleaned = SignatureService._remove_small_specks(
             merged,
-            connectivity=8,
+            min_area_ratio=0.00003,
+            min_area_abs=18,
         )
-        cleaned = np.zeros_like(merged)
-        for i in range(1, count):
-            if int(stats[i, cv2.CC_STAT_AREA]) >= min_area:
-                cleaned[labels == i] = 255
 
         rgba = np.zeros_like(rembg_arr)
         rgba[cleaned > 0] = (0, 0, 0, 255)
         return Image.fromarray(rgba, mode="RGBA")
+
+    @staticmethod
+    def _remove_small_specks(
+        mask: np.ndarray,
+        min_area_ratio: float = 0.00003,
+        min_area_abs: int = 18,
+    ) -> np.ndarray:
+        """删除面积过小的孤立噪点，保留主签名及邻近较大部件。"""
+        h, w = mask.shape[:2]
+        min_area = max(min_area_abs, int(h * w * min_area_ratio))
+
+        count, labels, stats, centroids = cv2.connectedComponentsWithStats(
+            mask,
+            connectivity=8,
+        )
+        if count <= 1:
+            return mask
+
+        # 主部件
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        main_idx = int(np.argmax(areas)) + 1
+        main_area = int(stats[main_idx, cv2.CC_STAT_AREA])
+        main_cx, main_cy = centroids[main_idx]
+        main_w = int(stats[main_idx, cv2.CC_STAT_WIDTH])
+        main_h = int(stats[main_idx, cv2.CC_STAT_HEIGHT])
+        radius = max(main_w, main_h) * 1.15
+
+        out = np.zeros_like(mask)
+        for i in range(1, count):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            cx, cy = centroids[i]
+            dist = float(np.hypot(cx - main_cx, cy - main_cy))
+
+            if i == main_idx:
+                out[labels == i] = 255
+            elif area >= max(min_area, int(main_area * 0.02)) and dist <= radius * 1.6:
+                out[labels == i] = 255
+            elif area >= max(min_area * 3, int(main_area * 0.05)) and dist <= radius * 2.2:
+                # 稍远但足够大的部件（另一个字）
+                out[labels == i] = 255
+
+        return out
 
     @staticmethod
     def _to_pure_black_signature(
@@ -552,7 +597,28 @@ class SignatureService:
             out[soft, 2] = 0
             out[soft, 3] = np.clip(np.round(a * 255.0), 0, 255).astype(np.uint8)
 
-        return Image.fromarray(out, mode="RGBA")
+        # 再清一次小噪点，避免最终 PNG 周围碎点
+        mask = np.where(out[:, :, 3] > threshold, 255, 0).astype(np.uint8)
+        cleaned = SignatureService._remove_small_specks(
+            mask,
+            min_area_ratio=0.00004,
+            min_area_abs=22,
+        )
+        final = np.zeros_like(out)
+        final[cleaned > 0] = (0, 0, 0, 255)
+        # 保留 soft edge：在 cleaned 邻域内的半透明可保留
+        soft_keep = (out[:, :, 3] > 0) & (cleaned == 0)
+        if np.any(soft_keep):
+            # 半透明且紧贴主墨迹才保留
+            dil = cv2.dilate(
+                cleaned,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+                iterations=1,
+            )
+            keep = soft_keep & (dil > 0)
+            final[keep] = out[keep]
+
+        return Image.fromarray(final, mode="RGBA")
 
     @staticmethod
     def _count_ink_pixels(image: Optional[Image.Image]) -> int:
