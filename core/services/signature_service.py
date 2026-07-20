@@ -519,6 +519,10 @@ class SignatureService:
         """
         最终输出：原图像素 + mask 透明通道。
         不改 RGB，不转纯黑，不加粗。
+        边缘硬切：alpha 只有 0 / 255，零羽化。
+
+        额外：用原图暗度收紧 mask，去掉检测框边缘带进来的浅色纸面像素，
+        避免黑底预览时出现白边/灰边。
         """
         if mask.shape[:2] != original_rgb.shape[:2]:
             mask = cv2.resize(
@@ -527,20 +531,93 @@ class SignatureService:
                 interpolation=cv2.INTER_NEAREST,
             )
 
-        # 轻微羽化边缘，仅作用于 alpha，不改颜色
-        soft = cv2.GaussianBlur(mask, (3, 3), 0.6)
-        alpha = soft.copy()
-        alpha[mask > 0] = np.maximum(alpha[mask > 0], 220)
-        alpha[mask == 0] = 0
+        gray = cv2.cvtColor(original_rgb, cv2.COLOR_RGB2GRAY).astype(np.float32)
+
+        # 只在检测 mask 内保留“真正够暗”的笔迹像素，去掉浅色纸边
+        roi = mask > 0
+        if np.any(roi):
+            dil = cv2.dilate(
+                mask,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25)),
+                iterations=1,
+            )
+            paper_vals = gray[dil > 0]
+            paper_ref = float(
+                np.percentile(paper_vals, 90)
+                if paper_vals.size > 50
+                else np.percentile(gray, 92)
+            )
+
+            roi_vals = gray[roi]
+            # 笔迹参考：mask 内较暗的部分
+            ink_ref = float(np.percentile(roi_vals, 20))
+
+            # 专门去掉抗锯齿浅色边缘（这些在黑底上会显白边）
+            # 条件：比纸面明显暗，且更接近墨色而不是纸色
+            min_delta = max(28.0, (paper_ref - ink_ref) * 0.45)
+            dark_cut = paper_ref - min_delta
+            dark_cut = float(np.clip(dark_cut, 30.0, paper_ref - 18.0))
+
+            stroke = roi & (gray <= dark_cut)
+
+            # 额外：丢弃偏亮边缘（平均亮度过高的像素）
+            bright_edge_cut = min(paper_ref - 20.0, max(ink_ref + 35.0, dark_cut))
+            stroke = stroke & (gray <= bright_edge_cut)
+
+            closer_to_ink = np.abs(gray - ink_ref) < np.abs(gray - paper_ref) * 0.75
+            stroke = stroke & closer_to_ink
+
+            # 过少则逐步放宽，但仍拒绝接近纸色的像素
+            if int(np.count_nonzero(stroke)) < max(60, int(np.count_nonzero(roi) * 0.10)):
+                dark_cut = paper_ref - max(20.0, min_delta * 0.7)
+                stroke = roi & (gray <= dark_cut) & (
+                    np.abs(gray - ink_ref) < np.abs(gray - paper_ref) * 0.9
+                )
+
+            if int(np.count_nonzero(stroke)) < 40:
+                thr = float(np.percentile(roi_vals, 45))
+                stroke = roi & (gray <= thr)
+
+            tight = np.zeros_like(mask)
+            tight[stroke] = 255
+
+            # 只连断裂，不膨胀加粗
+            tight = cv2.morphologyEx(
+                tight,
+                cv2.MORPH_CLOSE,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)),
+                iterations=1,
+            )
+
+            # 再剥掉最外 1px 抗锯齿浅边（原图白纸 AA，黑底会显灰白边）
+            # 若剥完后笔迹过细，则不剥
+            eroded = cv2.erode(
+                tight,
+                cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+                iterations=1,
+            )
+            if cv2.countNonZero(eroded) >= max(40, int(cv2.countNonZero(tight) * 0.55)):
+                tight = eroded
+
+            tight = SignatureService._remove_small_specks(
+                tight,
+                min_area_ratio=0.00003,
+                min_area_abs=16,
+            )
+            mask = tight
+
+        # 硬切 alpha：前景 255，背景 0
+        alpha = np.where(mask > 0, 255, 0).astype(np.uint8)
 
         rgba = np.zeros(
             (original_rgb.shape[0], original_rgb.shape[1], 4),
             dtype=np.uint8,
         )
+        # 100% 原图像素，不改颜色
         rgba[:, :, :3] = original_rgb
         rgba[:, :, 3] = alpha
 
-        # 背景 RGB 清零，避免预乘/预览异常
+        # 背景 RGB 清零
         rgba[alpha == 0, :3] = 0
         return Image.fromarray(rgba, mode="RGBA")
 
