@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 10:45:35
-#LastEditTime: 2026-07-19 10:34:48
+#LastEditTime: 2026-07-20 09:12:55
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 业务管理
 #FilePath: /stamp-ai-service/core/services/service.py
 #Copyright 版权声明
 #
+import base64
 import uuid
 import zipfile
 from pathlib import Path
@@ -152,6 +153,9 @@ class StampService:
                     url=self._build_output_url(
                         request_id,
                         file_name,
+                    ),
+                    base64=self._encode_base64_png(
+                        transparent_stamp,
                     ),
                 )
             )
@@ -460,6 +464,25 @@ class StampService:
             f"{request_id}/"
             f"{file_name}"
         )
+
+    @staticmethod
+    def _encode_base64_png(
+        image: np.ndarray,
+    ) -> str:
+        success, encoded = cv2.imencode(
+            ".png",
+            image,
+            [cv2.IMWRITE_PNG_COMPRESSION, 6],
+        )
+
+        if not success:
+            raise IOError("PNG Base64 编码失败")
+
+        payload = base64.b64encode(
+            encoded.tobytes()
+        ).decode("ascii")
+
+        return f"data:image/png;base64,{payload}"
 
 
 stamp_service = StampService()

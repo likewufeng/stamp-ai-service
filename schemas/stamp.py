@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 10:47:24
-#LastEditTime: 2026-07-17 15:47:39
+#LastEditTime: 2026-07-20 09:12:09
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 数据模型
 #FilePath: /stamp-ai-service/schemas/stamp.py
@@ -32,6 +32,8 @@ class StampOutput(BaseModel):
 
     file_name: str
     url: str
+    # data:image/png;base64,... 可直接用于前端 <img src>
+    base64: Optional[str] = None
 
 
 class StampExtractionResponse(BaseModel):
