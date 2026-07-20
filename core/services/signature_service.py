@@ -100,6 +100,9 @@ class SignatureService:
             alpha_threshold=ink_threshold,
         )
 
+        # rembg 在水印纸上常输出大面积半透明前景，先做“过脏”判定
+        rembg_dirty = self._is_over_segmented(rembg_rgba, ink_threshold)
+
         rembg_sig = self._to_pure_black_signature(
             rembg_rgba,
             alpha_threshold=ink_threshold,
@@ -117,85 +120,78 @@ class SignatureService:
         fallback_crop = self._crop_content(fallback_sig, padding=padding)
         merged_crop = self._crop_content(merged_sig, padding=padding)
 
-        rembg_score = self._score_signature_candidate(rembg_crop)
+        # 过脏的 rembg / merged 直接判无效，避免选到整页黑块
+        if rembg_dirty:
+            rembg_score = -1.0
+            merged_score = -1.0
+            logger.info(
+                "rembg 前景过脏（疑似水印纸），禁用 rembg/merged filename={}",
+                source_filename,
+            )
+        else:
+            rembg_score = self._score_signature_candidate(rembg_crop)
+            merged_score = self._score_signature_candidate(merged_crop)
+
         fallback_score = self._score_signature_candidate(fallback_crop)
-        merged_score = self._score_signature_candidate(merged_crop)
 
         logger.info(
-            "签名候选评分 filename={} rembg={:.3f} fallback={:.3f} merged={:.3f}",
+            "签名候选评分 filename={} rembg={:.3f} fallback={:.3f} merged={:.3f} dirty={}",
             source_filename,
             rembg_score,
             fallback_score,
             merged_score,
+            rembg_dirty,
         )
 
-        # 选择策略：
-        # 1) 默认优先 merged（补全淡笔）
-        # 2) 若 merged 噪声明显变差（分数显著低于 rembg），退回 rembg
-        # 3) rembg/fallback 都失败时用另一路
-        method = "merged"
-        signature = merged_sig
-        cropped = merged_crop
-        removed = merged_rgba
-
-        if cropped is None:
-            if rembg_crop is not None and rembg_score >= fallback_score:
-                method, signature, cropped, removed = (
-                    "rembg", rembg_sig, rembg_crop, rembg_rgba
-                )
-            elif fallback_crop is not None:
-                method, signature, cropped, removed = (
-                    "threshold_fallback", fallback_sig, fallback_crop, fallback_rgba
-                )
-            elif rembg_crop is not None:
-                method, signature, cropped, removed = (
-                    "rembg", rembg_sig, rembg_crop, rembg_rgba
-                )
-            else:
-                raise ValueError("未检测到签名内容，请检查图片是否包含清晰手写签名")
-        else:
-            # merged 墨迹量
-            merged_ink = self._count_ink_pixels(merged_crop)
-            rembg_ink = self._count_ink_pixels(rembg_crop)
-            fallback_ink = self._count_ink_pixels(fallback_crop)
-
-            # rembg 已经足够好时，优先 rembg（更干净，少噪点）
-            # 仅当 rembg 偏弱 / 漏笔较多时，才用 merged 补淡笔
-            rembg_good_enough = (
-                rembg_crop is not None
-                and rembg_score >= 0.75
-                and rembg_ink >= 800
+        candidates = []
+        if merged_crop is not None and merged_score >= 0:
+            candidates.append(
+                ("merged", merged_score, merged_sig, merged_crop, merged_rgba)
             )
-            merged_adds_a_lot = (
-                merged_ink >= max(rembg_ink, 1) * 1.18
+        if rembg_crop is not None and rembg_score >= 0:
+            candidates.append(
+                ("rembg", rembg_score, rembg_sig, rembg_crop, rembg_rgba)
             )
-            merged_much_better = merged_score >= rembg_score + 0.08
+        if fallback_crop is not None and fallback_score >= 0:
+            candidates.append(
+                (
+                    "threshold_fallback",
+                    fallback_score,
+                    fallback_sig,
+                    fallback_crop,
+                    fallback_rgba,
+                )
+            )
 
-            if rembg_good_enough and not (merged_adds_a_lot or merged_much_better):
-                method, signature, cropped, removed = (
-                    "rembg", rembg_sig, rembg_crop, rembg_rgba
-                )
-            elif (
-                rembg_crop is not None
-                and rembg_score > merged_score + 0.08
-                and merged_ink < rembg_ink * 1.08
-            ):
-                method, signature, cropped, removed = (
-                    "rembg", rembg_sig, rembg_crop, rembg_rgba
-                )
-            elif (
-                fallback_crop is not None
-                and fallback_score > max(merged_score, rembg_score) + 0.1
-                and fallback_ink > max(merged_ink, rembg_ink) * 1.15
-                and rembg_score < 0.55
-            ):
-                method, signature, cropped, removed = (
-                    "threshold_fallback", fallback_sig, fallback_crop, fallback_rgba
-                )
-            # 否则保持 merged
-
-        if cropped is None:
+        if not candidates:
             raise ValueError("未检测到签名内容，请检查图片是否包含清晰手写签名")
+
+        # 分高优先；同分时：fallback > rembg > merged（水印场景 fallback 更稳）
+        priority = {
+            "threshold_fallback": 3,
+            "rembg": 2,
+            "merged": 1,
+        }
+        candidates.sort(
+            key=lambda item: (item[1], priority.get(item[0], 0)),
+            reverse=True,
+        )
+        method, _, signature, cropped, removed = candidates[0]
+
+        # 若最高分来自 rembg/merged，但 ink 占比仍然偏大，强制 fallback
+        best_ink_ratio = self._ink_ratio(cropped)
+        if (
+            method in {"rembg", "merged"}
+            and best_ink_ratio > 0.18
+            and fallback_crop is not None
+            and self._ink_ratio(fallback_crop) < best_ink_ratio * 0.5
+        ):
+            method, signature, cropped, removed = (
+                "threshold_fallback",
+                fallback_sig,
+                fallback_crop,
+                fallback_rgba,
+            )
 
         logger.info(
             "签名选用 method={} ink(merged/rembg/fallback)={}/{}/{}",
@@ -317,7 +313,7 @@ class SignatureService:
     def _fallback_threshold_rgba(image: Image.Image) -> Image.Image:
         """
         传统回退：相对纸面暗度提取笔迹。
-        适合 rembg 对淡铅笔几乎无输出的情况。
+        适合 rembg 对淡铅笔几乎无输出，或水印纸导致 rembg 过脏的情况。
         """
         bgr = cv2.cvtColor(
             np.array(image.convert("RGB")),
@@ -332,12 +328,19 @@ class SignatureService:
 
         nonzero = diff[diff > 1]
         if nonzero.size > 200:
-            thr = max(4, int(np.percentile(nonzero, 88)))
-            thr = min(thr, 16)
+            # 水印纸上签名通常明显更深，取更高分位，压掉浅灰水印
+            thr = max(8, int(np.percentile(nonzero, 93)))
+            thr = min(thr, 28)
         else:
-            thr = 6
+            thr = 10
 
         _, mask = cv2.threshold(diff, thr, 255, cv2.THRESH_BINARY)
+
+        # 绝对暗度：签名墨迹通常比水印更深
+        paper_ref = float(np.percentile(blurred, 90))
+        dark_cut = max(40.0, paper_ref - 55.0)
+        dark_mask = np.where(blurred < dark_cut, 255, 0).astype(np.uint8)
+        mask = cv2.bitwise_and(mask, dark_mask)
 
         adaptive = cv2.adaptiveThreshold(
             blurred,
@@ -345,12 +348,12 @@ class SignatureService:
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY_INV,
             31,
-            8,
+            12,
         )
-        diff_gate = np.where(diff > max(1, thr - 2), 255, 0).astype(np.uint8)
+        # adaptive 只作为补充，且必须足够暗
         mask = cv2.bitwise_or(
             mask,
-            cv2.bitwise_and(adaptive, diff_gate),
+            cv2.bitwise_and(adaptive, dark_mask),
         )
 
         mask = cv2.medianBlur(mask.astype(np.uint8), 3)
@@ -367,12 +370,49 @@ class SignatureService:
             iterations=1,
         )
 
-        # 去小噪点，并只保留主签名团簇（抑制折痕/纸噪）
+        # 去小噪点，并只保留主签名团簇（抑制折痕/纸噪/水印碎片）
         cleaned = SignatureService._keep_main_signature_cluster(mask)
+        cleaned = SignatureService._remove_small_specks(
+            cleaned,
+            min_area_ratio=0.00005,
+            min_area_abs=30,
+        )
 
         rgba = np.zeros((mask.shape[0], mask.shape[1], 4), dtype=np.uint8)
         rgba[cleaned > 0] = (0, 0, 0, 255)
         return Image.fromarray(rgba, mode="RGBA")
+
+    @staticmethod
+    def _is_over_segmented(
+        rgba: Image.Image,
+        alpha_threshold: int = 30,
+    ) -> bool:
+        """
+        判断 rembg 结果是否“过脏”：
+        水印纸常见整页半透明前景，ink 占比会异常高。
+        """
+        arr = np.array(rgba.convert("RGBA"))
+        alpha = arr[:, :, 3]
+        thr = int(np.clip(alpha_threshold, 0, 255))
+        ink_ratio = float(np.count_nonzero(alpha > thr)) / float(max(alpha.size, 1))
+        soft_ratio = float(np.count_nonzero((alpha > 0) & (alpha <= 128))) / float(
+            max(alpha.size, 1)
+        )
+
+        # 正常签名裁切前，整页 ink 占比通常很低；>12% 基本就是误分割
+        if ink_ratio >= 0.12:
+            return True
+        # 大量半透明前景也像水印被当成主体
+        if soft_ratio >= 0.35 and ink_ratio >= 0.06:
+            return True
+        return False
+
+    @staticmethod
+    def _ink_ratio(image: Optional[Image.Image]) -> float:
+        if image is None:
+            return 0.0
+        alpha = np.array(image.convert("RGBA"))[:, :, 3]
+        return float(np.count_nonzero(alpha > 30)) / float(max(alpha.size, 1))
 
     @staticmethod
     def _keep_main_signature_cluster(mask: np.ndarray) -> np.ndarray:
@@ -663,8 +703,10 @@ class SignatureService:
         # 墨迹量（对数）
         ink_score = min(1.0, np.log1p(ink) / np.log1p(25000))
 
-        # 尺寸分：太小扣分
+        # 尺寸分：太小扣分；太大也要扣（整页误分割）
         size_score = min(1.0, area / 80000.0)
+        if area > 500000:
+            size_score *= 0.35
 
         # 过大且几乎空白：噪声
         penalty = 0.0
@@ -672,6 +714,11 @@ class SignatureService:
             penalty += 0.5
         if aspect < 0.3 or aspect > 12:
             penalty += 0.3
+        # 水印误分割：裁切后仍占大量像素
+        if fill > 0.35:
+            penalty += min(0.8, (fill - 0.35) * 2.0)
+        if ink > 200000:
+            penalty += 0.6
 
         score = (
             0.35 * ink_score
@@ -680,7 +727,7 @@ class SignatureService:
             + 0.20 * fill_score
             - penalty
         )
-        return float(score)
+        return float(np.clip(score, -1.0, 0.99))
 
     @staticmethod
     def _crop_content(
