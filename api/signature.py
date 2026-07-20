@@ -62,8 +62,8 @@ async def extract(
         description="fit(等比居中不变形，推荐) / fill(等比铺满裁剪) / stretch(强制拉伸)",
     ),
     return_type: str = Form(
-        default="url",
-        description="url / base64 / both",
+        default="base64",
+        description="返回方式：url / base64 / both（默认 base64）",
     ),
     padding: int = Form(
         default=30,
@@ -88,7 +88,7 @@ async def extract(
             ),
         )
 
-    normalized_return_type = (return_type or "url").strip().lower()
+    normalized_return_type = (return_type or "base64").strip().lower()
     if normalized_return_type not in {"url", "base64", "both"}:
         raise HTTPException(
             status_code=400,

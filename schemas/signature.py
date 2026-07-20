@@ -34,6 +34,7 @@ class SignatureOutput(BaseModel):
 
     file_name: str
     url: Optional[str] = None
+    # data:image/png;base64,... 可直接用于前端 <img src>
     base64: Optional[str] = None
 
 
@@ -55,7 +56,7 @@ class SignatureExtractionResponse(BaseModel):
     # fit=等比放入画布  fill=等比铺满后居中裁剪
     resize_mode: str = "fit"
 
-    return_type: str = "url"
+    return_type: str = "base64"
 
     count: int
     signatures: List[SignatureOutput]

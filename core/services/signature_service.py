@@ -62,7 +62,7 @@ class SignatureService:
         target_width: Optional[int] = None,
         target_height: Optional[int] = None,
         resize_mode: str = "fit",
-        return_type: str = "url",
+        return_type: str = "base64",
         padding: int = 30,
         ink_threshold: int = 30,
     ) -> SignatureExtractionResponse:
@@ -70,7 +70,7 @@ class SignatureService:
         request_output_dir = OUTPUT_DIR / request_id
         request_output_dir.mkdir(parents=True, exist_ok=True)
 
-        return_type = (return_type or "url").strip().lower()
+        return_type = (return_type or "base64").strip().lower()
         if return_type not in {"url", "base64", "both"}:
             raise ValueError("return_type 仅支持 url / base64 / both")
 
