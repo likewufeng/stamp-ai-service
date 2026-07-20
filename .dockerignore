@@ -1,11 +1,9 @@
-# Git / IDE
 .git
 .gitignore
 .vscode
 .idea
 **/.DS_Store
 
-# Python
 .venv
 venv
 env
@@ -17,7 +15,6 @@ __pycache__
 .mypy_cache
 .ruff_cache
 
-# Local runtime data (never bake into image)
 data
 uploads
 outputs
@@ -26,16 +23,9 @@ logs
 models
 *.onnx
 
-# Docs / deploy artifacts not needed in image runtime copy
-# (keep deploy/nginx out is fine; conf is mounted by compose)
 *.md
-DEPLOY.md
-README.md
 .env
 .env.*
 deploy/certs
 
-# Test leftovers
 temp/cleanup_test_root
-outputs/**
-uploads/**
