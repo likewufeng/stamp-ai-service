@@ -9,3 +9,8 @@ Pillow==11.3.0
 pydantic==2.11.7
 aiofiles==24.1.0
 loguru==0.7.3
+
+# signature extract (rembg background removal)
+# Note: some mirrors only have up to 2.0.61
+rembg==2.0.61
+onnxruntime>=1.17.0,<1.23.0

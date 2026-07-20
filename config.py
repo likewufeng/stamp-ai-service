@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:53
-#LastEditTime: 2026-07-17 15:47:14
+#LastEditTime: 2026-07-19 14:47:46
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 配置文件
 #FilePath: /stamp-ai-service/config.py
@@ -30,7 +30,7 @@ for directory in (
 
 
 APP_NAME = "Stamp AI Service"
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.5.0"
 
 MAX_UPLOAD_BYTES = int(
     os.getenv("MAX_UPLOAD_BYTES", 30 * 1024 * 1024)
