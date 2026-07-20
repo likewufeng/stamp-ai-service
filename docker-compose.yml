@@ -4,7 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # 国内网络建议打开（阿里云 Debian + 清华 PyPI）
         APT_MIRROR: ${APT_MIRROR:-mirrors.aliyun.com}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     container_name: stamp-ai-service
@@ -30,8 +29,9 @@ services:
     expose:
       - "8000"
     # Direct access (optional). Prefer nginx in production.
+    # Host default 18080 to avoid common 8000 conflicts.
     ports:
-      - "${HOST_PORT:-8000}:8000"
+      - "${HOST_PORT:-18080}:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
       interval: 30s
@@ -63,9 +63,10 @@ services:
       stamp-ai:
         condition: service_healthy
     ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
+      # Host default 18088 to avoid common 80 conflicts.
+      - "${NGINX_HTTP_PORT:-18088}:80"
       # Uncomment when TLS certs are ready:
-      # - "${NGINX_HTTPS_PORT:-443}:443"
+      # - "${NGINX_HTTPS_PORT:-18443}:443"
     volumes:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./data/outputs:/var/www/outputs:ro

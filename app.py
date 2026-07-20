@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:42
-#LastEditTime: 2026-07-20 14:07:30
+#LastEditTime: 2026-07-20 15:29:30
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 服务器入口
 #FilePath: /stamp-ai-service/app.py
@@ -110,7 +110,8 @@ if __name__ == "__main__":
         "app:app",
         host="0.0.0.0",
         port=int(
-            os.getenv("APP_PORT", "8000")
+            # local bare-metal default; Docker still uses container 8000
+            os.getenv("APP_PORT", "18080")
         ),
         reload=reload_enabled,
     )

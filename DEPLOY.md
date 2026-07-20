@@ -11,12 +11,12 @@
                         │
                         ▼
               ┌──────────────────┐
-              │  Nginx (:80/443) │  反向代理 / 限流 / 静态 outputs
+              │  Nginx (:18088)  │  反向代理 / 限流 / 静态 outputs
               └────────┬─────────┘
                        │
                        ▼
               ┌──────────────────┐
-              │ stamp-ai (:8000) │  FastAPI + uvicorn
+              │ stamp-ai (:8000 容器内) │  FastAPI + uvicorn
               │  · 印章 extract  │
               │  · 签名 extract  │
               │  · rembg/u2net   │
@@ -96,10 +96,10 @@ docker compose logs -f stamp-ai
 
 ```bash
 # 经 Nginx
-curl -s http://127.0.0.1/api/health
+curl -s http://127.0.0.1:18088/api/health
 
 # 或直连应用端口
-curl -s http://127.0.0.1:8000/api/health
+curl -s http://127.0.0.1:18080/api/health
 
 # 打开文档
 # http://<服务器IP>/docs
@@ -109,12 +109,12 @@ curl -s http://127.0.0.1:8000/api/health
 
 ```bash
 # 印章
-curl -X POST "http://127.0.0.1/api/stamp/extract" \
+curl -X POST "http://127.0.0.1:18088/api/stamp/extract" \
   -F "file=@/path/to/stamp.jpg" \
   -F "return_type=base64"
 
 # 签名
-curl -X POST "http://127.0.0.1/api/signature/extract" \
+curl -X POST "http://127.0.0.1:18088/api/signature/extract" \
   -F "file=@/path/to/sign.jpg" \
   -F "width=800" \
   -F "height=400" \
@@ -164,8 +164,8 @@ cp .env.example .env
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `HOST_PORT` | `8000` | 应用端口映射到宿主机 |
-| `NGINX_HTTP_PORT` | `80` | Nginx HTTP 端口 |
+| `HOST_PORT` | `18080` | 应用端口映射到宿主机 |
+| `NGINX_HTTP_PORT` | `18088` | Nginx HTTP 端口 |
 | `UVICORN_WORKERS` | `2` | worker 数（CPU 核数相关） |
 | `MAX_UPLOAD_BYTES` | `31457280` | 最大上传 30MB |
 | `CLEANUP_ENABLED` | `true` | 定时清 uploads/outputs/temp |
@@ -221,7 +221,7 @@ deploy/certs/privkey.pem
 docker compose up -d nginx
 ```
 
-也可用宿主机 Nginx / Caddy / SLB 做 TLS 终结，反代到本机 `80` 或 `8000`。
+也可用宿主机 Nginx / Caddy / SLB 做 TLS 终结，反代到本机 `18088` 或 `18080`。
 
 ---
 
@@ -241,8 +241,8 @@ docker compose up -d nginx
 
 ### 8.3 安全
 
-- 生产环境不要把 `8000` 对公网暴露，只暴露 Nginx `80/443`。
-  - 可在 `.env` 去掉或注释 compose 里 stamp-ai 的 `ports`，仅 `expose: 8000`。
+- 生产环境不要把 `8000` 对公网暴露，只暴露 Nginx `18088`（或你配置的 HTTPS 端口）。
+  - 可在 `.env` 去掉或注释 compose 里 stamp-ai 的 `ports`，仅 `expose: 8000`（容器内端口）。
 - 配置防火墙：只放行 80/443/22。
 - 如有鉴权需求，在 Nginx 或网关加 API Key / JWT（当前服务默认无鉴权）。
 
@@ -288,7 +288,7 @@ mkdir -p uploads outputs logs temp models/u2net
 export U2NET_HOME=/opt/stamp-ai-service/models/u2net
 
 # 4) 启动
-uvicorn app:app --host 0.0.0.0 --port 8000 --workers 2
+uvicorn app:app --host 0.0.0.0 --port 18080 --workers 2
 ```
 
 systemd 单元示例 `/etc/systemd/system/stamp-ai.service`：
@@ -306,7 +306,7 @@ Environment=U2NET_HOME=/opt/stamp-ai-service/models/u2net
 Environment=UVICORN_WORKERS=2
 Environment=CLEANUP_ENABLED=true
 Environment=LOG_RETENTION_DAYS=3
-ExecStart=/opt/stamp-ai-service/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000 --workers 2 --proxy-headers
+ExecStart=/opt/stamp-ai-service/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 18080 --workers 2 --proxy-headers
 Restart=always
 RestartSec=5
 
@@ -320,7 +320,7 @@ sudo systemctl enable --now stamp-ai
 sudo systemctl status stamp-ai
 ```
 
-前面再挂一层 Nginx 反代到 `127.0.0.1:8000` 即可。
+前面再挂一层 Nginx 反代到 `127.0.0.1:18080` 即可。
 
 ---
 
@@ -395,5 +395,5 @@ sudo chown -R 1000:1000 data
 
 ```bash
 ./deploy/deploy.sh
-# 浏览器打开 http://服务器IP/docs
+# 浏览器打开 http://服务器IP:18088/docs
 ```

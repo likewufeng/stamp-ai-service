@@ -48,14 +48,14 @@ docker compose up -d
 
 echo "[6/6] Wait health..."
 for i in $(seq 1 40); do
-  if curl -fsS "http://127.0.0.1:${HOST_PORT:-8000}/api/health" >/dev/null 2>&1 \
-    || curl -fsS "http://127.0.0.1:${NGINX_HTTP_PORT:-80}/api/health" >/dev/null 2>&1; then
+  if curl -fsS "http://127.0.0.1:${HOST_PORT:-18080}/api/health" >/dev/null 2>&1 \
+    || curl -fsS "http://127.0.0.1:${NGINX_HTTP_PORT:-18088}/api/health" >/dev/null 2>&1; then
     echo "Service is healthy."
     docker compose ps
     echo
-    echo "Docs:    http://<server-ip>/docs"
-    echo "Health:  http://<server-ip>/api/health"
-    echo "Direct:  http://<server-ip>:${HOST_PORT:-8000}/docs"
+    echo "Nginx:   http://<server-ip>:${NGINX_HTTP_PORT:-18088}/docs"
+    echo "Health:  http://<server-ip>:${NGINX_HTTP_PORT:-18088}/api/health"
+    echo "Direct:  http://<server-ip>:${HOST_PORT:-18080}/docs"
     exit 0
   fi
   sleep 3
