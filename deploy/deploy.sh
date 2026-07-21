@@ -28,7 +28,7 @@ export HOST_PORT="${HOST_PORT:-18080}"
 
 # 避免沿用旧 .env 里的 80/8000（极易被占用）
 if [[ "${HOST_PORT}" == "80" || "${HOST_PORT}" == "8000" ]]; then
-  echo "WARN: HOST_PORT=${HOST_PORT} is commonly occupied; override to 18080"s
+  echo "WARN: HOST_PORT=${HOST_PORT} is commonly occupied; override to 18080"
   echo "      Please edit .env: HOST_PORT=18080"
   export HOST_PORT=18080
 fi

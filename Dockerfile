@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
   PYTHONUNBUFFERED=1 \
   PIP_NO_CACHE_DIR=1 \
   PIP_DISABLE_PIP_VERSION_CHECK=1 \
-  U2NET_HOME=/app/models/u2net \
+  U2NET_HOME=/app/data/models/u2net \
   APP_PORT=8000 \
   APP_RELOAD=false \
   DEBIAN_FRONTEND=noninteractive
@@ -57,7 +57,7 @@ RUN set -eux; \
 
 COPY . .
 
-RUN mkdir -p /app/uploads /app/outputs /app/logs /app/temp /app/models/u2net \
+RUN mkdir -p /app/data/uploads /app/data/outputs /app/data/logs /app/data/temp /app/data/models/u2net \
   && useradd --create-home --shell /bin/bash appuser \
   && chown -R appuser:appuser /app
 
