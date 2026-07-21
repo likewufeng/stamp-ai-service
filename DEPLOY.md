@@ -42,7 +42,7 @@
 | 系统 | Linux x86_64 | Ubuntu 22.04 / Debian 12 |
 | 软件 | Docker 24+ / Compose v2 | 同左 |
 
-> 首次启动会下载 `u2net.onnx`（约 176MB）到 `data/models/u2net`，需能访问 GitHub 或提前拷贝模型。
+> **镜像已在构建阶段预下载 `u2net.onnx`（约 176MB）**，无需运行时联网下载，避免 SSL/网络问题。如需离线部署，只需确保构建机器能访问 GitHub/镜像源即可。
 
 ---
 
@@ -141,11 +141,11 @@ stamp-ai-service/
 
 | 卷 | 容器路径 | 说明 |
 | --- | --- | --- |
-| `data/uploads` | `/app/uploads` | 上传原图 |
-| `data/outputs` | `/app/outputs` | 结果 PNG / zip |
-| `data/logs` | `/app/logs` | 应用日志 |
-| `data/temp` | `/app/temp` | 临时文件 |
-| `data/models/u2net` | `/app/models/u2net` | 模型，避免重复下载 |
+| `data/uploads` | `/app/data/uploads` | 上传原图 |
+| `data/outputs` | `/app/data/outputs` | 结果 PNG / zip |
+| `data/logs` | `/app/data/logs` | 应用日志 |
+| `data/temp` | `/app/data/temp` | 临时文件 |
+| `data/models/u2net` | `/app/data/models/u2net` | 模型，避免重复下载 |
 
 ---
 
@@ -226,18 +226,14 @@ http://127.0.0.1:18080
   - - 配置防火墙：只放行 80/443/22。
 - 如有鉴权需求，在 Nginx 或网关加 API Key / JWT（当前服务默认无鉴权）。
 
-### 8.4 模型离线安装
+### 8.4 模型管理（重要更新）
 
-无外网时，在可联网机器下载后拷贝：
+**镜像构建时自动下载 `u2net.onnx`**，使用国内镜像源（ghfast.top）加速，失败时回退 GitHub，并校验 MD5。
 
-```bash
-# 目标路径
-mkdir -p data/models/u2net
-# 将 u2net.onnx 放到：
-# data/models/u2net/u2net.onnx
-```
-
-容器内环境变量 `U2NET_HOME=/app/models/u2net` 已配置。
+- **无需手动下载模型**，构建完成即可使用
+- **离线部署**：在有网机器执行 `docker compose build` 生成镜像，再 `docker save` 导出，拷贝到离线机器 `docker load`
+- **模型路径**：容器内 `/app/data/models/u2net/u2net.onnx`，对应宿主机 `data/models/u2net/u2net.onnx`
+- **环境变量**：`U2NET_HOME=/app/data/models/u2net` 已在 Dockerfile 和 compose 中配置
 
 ### 8.5 健康检查与监控
 
@@ -317,10 +313,24 @@ docker compose build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn
 
 或在 Dockerfile 的 `pip install` 增加 `-i`。
 
+### 模型下载失败（构建阶段）
+
+Dockerfile 已配置双镜像源（ghfast.top 优先，GitHub 回退）并校验 MD5。若仍失败：
+
+1. 检查构建机器网络：`curl -I https://ghfast.top/https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx`
+2. 手动下载模型放入构建上下文，修改 Dockerfile 使用 `COPY` 而非 `curl`
+
+```bash
+# 手动下载（有网机器）
+mkdir -p data/models/u2net
+curl -fL -o data/models/u2net/u2net.onnx "https://ghfast.top/https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"
+# 然后在 Dockerfile 中将下载步骤改为：
+# COPY data/models/u2net/u2net.onnx /app/data/models/u2net/u2net.onnx
+```
+
 ### 首次请求很慢
 
-冷启动加载 onnx 模型，属正常；模型落盘后会快很多。  
-可在上线前先调一次签名接口预热。
+模型已在构建阶段下载，容器启动后首次请求仅加载 ONNX 模型到内存（约 1-2 秒），属正常。
 
 ### 内存不足 OOM
 
@@ -363,7 +373,7 @@ sudo chown -R 1000:1000 data
 
 | 路径 | 说明 |
 | --- | --- |
-| `Dockerfile` | 生产镜像 |
+| `Dockerfile` | 生产镜像（含构建期模型下载） |
 | `docker-compose.yml` | 仅应用服务 |
 | `.env.example` | 环境变量模板 |
 | `deploy/deploy.sh` | 一键部署脚本 |

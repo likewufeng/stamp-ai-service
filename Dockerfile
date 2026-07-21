@@ -57,6 +57,31 @@ RUN set -eux; \
 
 COPY . .
 
+# Pre-download u2net.onnx model during build to avoid runtime SSL issues
+# Using a China-friendly mirror (ghfast.top or gitee) as primary, fallback to GitHub
+RUN set -eux; \
+  mkdir -p /app/data/models/u2net; \
+  MODEL_URL_PRIMARY="https://ghfast.top/https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"; \
+  MODEL_URL_FALLBACK="https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"; \
+  MODEL_PATH="/app/data/models/u2net/u2net.onnx"; \
+  EXPECTED_MD5="60024c5c889badc19c04ad937298a77b"; \
+  echo "Downloading u2net.onnx model..."; \
+  if curl -fL --connect-timeout 30 --max-time 300 -o "$MODEL_PATH" "$MODEL_URL_PRIMARY"; then \
+  echo "Downloaded from primary mirror"; \
+  elif curl -fL --connect-timeout 30 --max-time 300 -o "$MODEL_PATH" "$MODEL_URL_FALLBACK"; then \
+  echo "Downloaded from fallback (GitHub)"; \
+  else \
+  echo "ERROR: Failed to download u2net.onnx from both mirrors"; \
+  exit 1; \
+  fi; \
+  # Verify MD5
+  ACTUAL_MD5=$(md5sum "$MODEL_PATH" | cut -d' ' -f1); \
+  if [ "$ACTUAL_MD5" != "$EXPECTED_MD5" ]; then \
+  echo "ERROR: MD5 mismatch! Expected $EXPECTED_MD5, got $ACTUAL_MD5"; \
+  exit 1; \
+  fi; \
+  echo "Model verified (MD5: $ACTUAL_MD5)"
+
 RUN mkdir -p /app/data/uploads /app/data/outputs /app/data/logs /app/data/temp /app/data/models/u2net \
   && useradd --create-home --shell /bin/bash appuser \
   && chown -R appuser:appuser /app
