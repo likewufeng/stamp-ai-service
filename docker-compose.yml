@@ -22,14 +22,14 @@ services:
       CLEANUP_INTERVAL_SECONDS: ${CLEANUP_INTERVAL_SECONDS:-3600}
       CLEANUP_MAX_AGE_SECONDS: ${CLEANUP_MAX_AGE_SECONDS:-86400}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-3}
-      U2NET_HOME: /app/models/u2net
+      U2NET_HOME: /app/data/models/u2net   # 指向 data/models/u2net
     volumes:
-      - ./data/uploads:/app/uploads
-      - ./data/outputs:/app/outputs
-      - ./data/logs:/app/logs
-      - ./data/temp:/app/temp
+      - ./data/uploads:/app/data/uploads
+      - ./data/outputs:/app/data/outputs
+      - ./data/logs:/app/data/logss
+      - ./data/temp:/app/data/temp
       # Persist rembg model (~176MB) so restart won't re-download
-      - ./data/models/u2net:/app/models/u2net
+      - ./data/models:/app/data/models
     # Host default 18080 to avoid common 80/8000 conflicts
     ports:
       - "${HOST_PORT:-18080}:8000"
