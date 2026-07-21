@@ -1,12 +1,12 @@
 ## 部署
 
-完整生产部署方案见 **[DEPLOY.md](./DEPLOY.md)**（Docker Compose + Nginx）。
+完整生产部署方案见 **[DEPLOY.md](./DEPLOY.md)**（Docker Compose，仅应用服务）。
 
 ```bash
 cp .env.example .env
 chmod +x deploy/deploy.sh
 ./deploy/deploy.sh
-# 文档: http://服务器IP/docs
+# 文档: http://服务器IP:18080/docs
 ```
 
 ### 为了提高生产环境的稳定性，我还建议加入以下优化：
@@ -201,21 +201,21 @@ TableDetector   StampDetector
 
 ```bash
 # 默认：只返回 base64
-curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
+curl -X POST "http://127.0.0.1:18080/api/stamp/extract" \
   -F "file=@stamp_scan.jpg"
 
 # 只返回 URL + ZIP
-curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
+curl -X POST "http://127.0.0.1:18080/api/stamp/extract" \
   -F "file=@stamp_scan.jpg" \
   -F "return_type=url"
 
 # 同时返回 URL 和 base64
-curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
+curl -X POST "http://127.0.0.1:18080/api/stamp/extract" \
   -F "file=@stamp_scan.jpg" \
   -F "return_type=both"
 
 # 开启调试 + 关闭透视校正
-curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
+curl -X POST "http://127.0.0.1:18080/api/stamp/extract" \
   -F "file=@stamp_scan.jpg" \
   -F "return_type=both" \
   -F "debug=true" \
@@ -235,7 +235,7 @@ curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
 - 支持一次检出多个印章
 - 输出为透明 PNG（Alpha 通道）
 - 访问 `url` / `zip_url` 时，服务需已挂载静态目录 `/outputs`
-- 在线调试文档：`http://127.0.0.1:8000/docs`
+- 在线调试文档：`http://127.0.0.1:18080/docs`
 
 ---
 
@@ -278,20 +278,20 @@ curl -X POST "http://127.0.0.1:8000/api/stamp/extract" \
 
 ```bash
 # 默认返回 base64
-curl -X POST "http://127.0.0.1:8000/api/signature/extract" \
+curl -X POST "http://127.0.0.1:18080/api/signature/extract" \
   -F "file=@signature.jpg" \
   -F "width=800" \
   -F "height=400"
 
 # 返回 URL
-curl -X POST "http://127.0.0.1:8000/api/signature/extract" \
+curl -X POST "http://127.0.0.1:18080/api/signature/extract" \
   -F "file=@signature.jpg" \
   -F "width=400" \
   -F "height=200" \
   -F "return_type=url"
 
 # 同时返回 url + base64
-curl -X POST "http://127.0.0.1:8000/api/signature/extract" \
+curl -X POST "http://127.0.0.1:18080/api/signature/extract" \
   -F "file=@signature.jpg" \
   -F "width=512" \
   -F "height=256" \

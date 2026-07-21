@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:53
-#LastEditTime: 2026-07-20 14:06:52
+#LastEditTime: 2026-07-21 12:26:48
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 配置文件
 #FilePath: /stamp-ai-service/config.py
@@ -13,11 +13,11 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
-UPLOAD_DIR = BASE_DIR / "uploads"
-OUTPUT_DIR = BASE_DIR / "outputs"
-TEMP_DIR = BASE_DIR / "temp"
-LOG_DIR = BASE_DIR / "logs"
-MODEL_DIR = BASE_DIR / "models"
+UPLOAD_DIR = BASE_DIR / "data/uploads"
+OUTPUT_DIR = BASE_DIR / "data/outputs"
+TEMP_DIR = BASE_DIR / "data/temp"
+LOG_DIR = BASE_DIR / "data/logs"
+MODEL_DIR = BASE_DIR / "data/models"
 
 for directory in (
     UPLOAD_DIR,

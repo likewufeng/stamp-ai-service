@@ -1,6 +1,6 @@
 # Stamp AI Service 部署方案
 
-面向 **CPU 服务器 + Docker Compose + Nginx** 的生产部署说明。
+面向 **CPU 服务器 + Docker Compose（仅应用服务，无 Nginx）** 的生产部署说明。
 
 ---
 
@@ -10,29 +10,24 @@
                     Internet
                         │
                         ▼
-              ┌──────────────────┐
-              │  Nginx (:18088)  │  反向代理 / 限流 / 静态 outputs
-              └────────┬─────────┘
-                       │
-                       ▼
-              ┌──────────────────┐
-              │ stamp-ai (:8000 容器内) │  FastAPI + uvicorn
-              │  · 印章 extract  │
-              │  · 签名 extract  │
-              │  · rembg/u2net   │
-              │  · 定时清理      │
-              └────────┬─────────┘
-                       │
-         ┌─────────────┼─────────────┐
-         ▼             ▼             ▼
-    data/uploads  data/outputs  data/models/u2net
-    data/logs     data/temp
+              ┌──────────────────────────┐
+              │ stamp-ai (:18080 宿主机) │  FastAPI + uvicorn
+              │  容器内端口 :8000         │
+              │  · 印章 / 签名 extract   │
+              │  · rembg/u2net           │
+              │  · /outputs 静态文件     │
+              │  · 定时清理              │
+              └────────────┬─────────────┘
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+        data/uploads  data/outputs  data/models/u2net
+        data/logs     data/temp
 ```
 
 | 组件 | 职责 |
 | --- | --- |
-| **Nginx** | 对外入口、反代 API、直接托管 `/outputs` 静态文件 |
-| **stamp-ai** | 业务服务（印章 / 签名抠图） |
+| **stamp-ai** | 业务服务（印章 / 签名抠图）+ 静态 `/outputs` |
 | **数据卷** | 上传、结果、日志、rembg 模型持久化 |
 
 ---
@@ -96,7 +91,7 @@ docker compose logs -f stamp-ai
 
 ```bash
 # 经 Nginx
-curl -s http://127.0.0.1:18088/api/health
+curl -s http://127.0.0.1:18080/api/health
 
 # 或直连应用端口
 curl -s http://127.0.0.1:18080/api/health
@@ -109,12 +104,12 @@ curl -s http://127.0.0.1:18080/api/health
 
 ```bash
 # 印章
-curl -X POST "http://127.0.0.1:18088/api/stamp/extract" \
+curl -X POST "http://127.0.0.1:18080/api/stamp/extract" \
   -F "file=@/path/to/stamp.jpg" \
   -F "return_type=base64"
 
 # 签名
-curl -X POST "http://127.0.0.1:18088/api/signature/extract" \
+curl -X POST "http://127.0.0.1:18080/api/signature/extract" \
   -F "file=@/path/to/sign.jpg" \
   -F "width=800" \
   -F "height=400" \
@@ -165,7 +160,6 @@ cp .env.example .env
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `HOST_PORT` | `18080` | 应用端口映射到宿主机 |
-| `NGINX_HTTP_PORT` | `18088` | Nginx HTTP 端口 |
 | `UVICORN_WORKERS` | `2` | worker 数（CPU 核数相关） |
 | `MAX_UPLOAD_BYTES` | `31457280` | 最大上传 30MB |
 | `CLEANUP_ENABLED` | `true` | 定时清 uploads/outputs/temp |
@@ -183,7 +177,6 @@ docker compose ps
 
 # 日志
 docker compose logs -f stamp-ai
-docker compose logs -f nginx
 
 # 重启
 docker compose restart stamp-ai
@@ -204,24 +197,12 @@ docker compose down
 
 ## 7. HTTPS（可选）
 
-1. 将证书放到 `deploy/certs/`：
+当前 compose **不含 Nginx**。如需 HTTPS，在宿主机或云 SLB 上终结 TLS，反代到：
 
 ```text
-deploy/certs/fullchain.pem
-deploy/certs/privkey.pem
+http://127.0.0.1:18080
 ```
 
-2. 编辑 `deploy/nginx/default.conf`，取消 HTTPS `server` 注释，并设置 `server_name`。
-
-3. 在 `docker-compose.yml` 的 nginx 服务中打开 443 端口与 certs 挂载。
-
-4. 重载：
-
-```bash
-docker compose up -d nginx
-```
-
-也可用宿主机 Nginx / Caddy / SLB 做 TLS 终结，反代到本机 `18088` 或 `18080`。
 
 ---
 
@@ -241,9 +222,8 @@ docker compose up -d nginx
 
 ### 8.3 安全
 
-- 生产环境不要把 `8000` 对公网暴露，只暴露 Nginx `18088`（或你配置的 HTTPS 端口）。
-  - 可在 `.env` 去掉或注释 compose 里 stamp-ai 的 `ports`，仅 `expose: 8000`（容器内端口）。
-- 配置防火墙：只放行 80/443/22。
+- 生产环境不要把 `8000` 对公网暴露，按需暴露 `HOST_PORT`（默认 18080）；前面可再挂公司网关/SLB。
+  - - 配置防火墙：只放行 80/443/22。
 - 如有鉴权需求，在 Nginx 或网关加 API Key / JWT（当前服务默认无鉴权）。
 
 ### 8.4 模型离线安装
@@ -384,9 +364,8 @@ sudo chown -R 1000:1000 data
 | 路径 | 说明 |
 | --- | --- |
 | `Dockerfile` | 生产镜像 |
-| `docker-compose.yml` | 应用 + Nginx |
+| `docker-compose.yml` | 仅应用服务 |
 | `.env.example` | 环境变量模板 |
-| `deploy/nginx/default.conf` | 反代配置 |
 | `deploy/deploy.sh` | 一键部署脚本 |
 | `utils/cleanup.py` | 上传/输出定时清理 |
 | `config.py` | 运行时配置 |
@@ -395,5 +374,5 @@ sudo chown -R 1000:1000 data
 
 ```bash
 ./deploy/deploy.sh
-# 浏览器打开 http://服务器IP:18088/docs
+# 浏览器打开 http://服务器IP:18080/docs
 ```
