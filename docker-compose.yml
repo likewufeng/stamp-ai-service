@@ -1,3 +1,7 @@
+# Stamp AI Service - app only (no nginx)
+# Host port default: 18080  ->  container 8000
+# Override in .env: HOST_PORT=18080
+
 services:
   stamp-ai:
     build:
