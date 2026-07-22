@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:53
-#LastEditTime: 2026-07-21 15:12:51
+#LastEditTime: 2026-07-22 08:46:43
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 配置文件
 #FilePath: /stamp-ai-service/config.py
@@ -50,7 +50,7 @@ ALLOWED_EXTENSIONS = {
     ".tiff",
 }
 
-OUTPUT_URL_PREFIX = "http://192.168.9.167:18080/outputs"
+OUTPUT_URL_PREFIX = "http://192.168.28.177:18080/outputs"
 
 # 定时清理 uploads / outputs / temp 中的过期文件
 # CLEANUP_ENABLED: true/false
