@@ -13,16 +13,30 @@ services:
     container_name: stamp-ai-service
     restart: unless-stopped
     environment:
+      # App info
+      APP_NAME: ${APP_NAME:-Stamp AI Service}
+      APP_VERSION: ${APP_VERSION:-0.6.0}
+      # Ports
       APP_PORT: ${APP_PORT:-8000}
       UVICORN_WORKERS: ${UVICORN_WORKERS:-2}
       APP_RELOAD: "false"
+      # Data directories
+      DATA_ROOT: ${DATA_ROOT:-/app/data}
+      # Upload limits
       MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-31457280}
       MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-60000000}
+      # Allowed extensions
+      ALLOWED_EXTENSIONS: ${ALLOWED_EXTENSIONS:-.jpg,.jpeg,.png,.bmp,.webp,.tif,.tiff}
+      # Output URL prefix (生产必须配置为公网域名/IP)
+      OUTPUT_URL_PREFIX: ${OUTPUT_URL_PREFIX:-http://127.0.0.1:18080/outputs}
+      # Cleanup
       CLEANUP_ENABLED: ${CLEANUP_ENABLED:-true}
       CLEANUP_INTERVAL_SECONDS: ${CLEANUP_INTERVAL_SECONDS:-3600}
       CLEANUP_MAX_AGE_SECONDS: ${CLEANUP_MAX_AGE_SECONDS:-86400}
+      # Logs
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-3}
-      U2NET_HOME: /app/data/models/u2net   # 指向 data/models/u2net
+      # Model
+      U2NET_HOME: /app/data/models/u2net
     volumes:
       - ./data/uploads:/app/data/uploads
       - ./data/outputs:/app/data/outputs

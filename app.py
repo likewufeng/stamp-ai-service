@@ -1,12 +1,23 @@
 # -*- coding: utf-8 -*-
 #Author: WuFeng <763467339@qq.com>
 #Date: 2026-07-17 09:39:42
-#LastEditTime: 2026-07-20 15:29:30
+#LastEditTime: 2026-07-22 10:17:40
 #LastEditors: WuFeng <763467339@qq.com>
 #Description: 服务器入口
 #FilePath: /stamp-ai-service/app.py
 #Copyright 版权声明
 #
+# ──────────────────────────────────────────────
+# 必须在最开始加载 .env，确保后续导入 config 时环境变量已生效
+# 本地开发：读取项目根目录 .env
+# Docker/生产：docker-compose 已通过 env_file 注入，load_dotenv 会静默跳过
+# ──────────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # 自动查找并加载 .env 文件
+except ImportError:
+    pass  # 生产环境未装 python-dotenv 时忽略
+
 import os
 from contextlib import asynccontextmanager
 
